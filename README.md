@@ -6,10 +6,6 @@
 
 在 Mac 菜单栏上一键切换 Redmi G Pro 27U 智能显示器的**信号源**（DP / HDMI 1 / HDMI 2 / USB-C）、调节**背光**和**音量**。显示器端无需安装任何应用，走无线 ADB。
 
-## 搜索关键词 / Keywords
-
-Redmi 显示器 G Pro 27U · Redmi G Pro 27U 2025 · Redmi G Pro 27U 2026 · 小米智能显示器 · Redmi 智能显示器 · XMI27B3 · XMI3009 · MiTV-MFFU1 · 澎湃OS · HyperOS · 小米显示器 Mac · 显示器 信号源切换 · ADB 控制显示器 · Mac menu bar app · input source switch · monitor control · MtkDirectTool
-
 ## 兼容性
 
 | 机型 | 状态 |
