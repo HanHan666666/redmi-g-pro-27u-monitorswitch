@@ -23,7 +23,7 @@ Redmi 显示器 G Pro 27U · Redmi G Pro 27U 2025 · Redmi G Pro 27U 2026 · 小
 
 - 🖥 菜单栏面板一键切换信号源：DP / HDMI 1 / HDMI 2 / USB-C，当前源实时打勾
 - 🔆 背光拖动条（1–100）——寄存器直写 `g_disp__disp_back_light` + `PIC_MODE_CHANGED` 广播刷新 + settings 记账，松手即时生效（与 Mimonitor_Toolbox 同款三步）
-- 🔊 音量拖动条（0–100）+ 静音按钮——面板点击后不收起，松手一次性设置到位
+- 🔊 音量拖动条（0–100）+ 静音按钮——**一步到位**：自研 `VolDirectTool` 经 TvService 以 system 身份直调 `AudioManager.setStreamVolume`（与小爱同学同一条生效路径），瞬时生效；异常时自动回退 keyevent 步进
 - ● 连接状态轮询（10s）+ 自动重连，掉线图标变划线显示器
 - 首次连接自动向显示器部署内嵌的 `MtkDirectTool.jar`（5KB，MIT）并读寄存器校准真实背光
 - 首次运行设置设备地址，存 `UserDefaults`，代码不写死任何地址
@@ -63,7 +63,9 @@ settings get global mitv.tvplayer.hdmi.last.source
 #   settings put global picture_backlight / xiaomi_picture_backlight <N>
 ```
 
-注意：这台固件上存在「写账不动物件」的坑——`media_session --set` 返回成功但**不会真正改音量**（假成功，音量只能用 `input keyevent 24/25` 步进）；背光只写 `settings put` 也**不会改变实际亮度**，必须走寄存器直写。本项目已替你踩过这些坑。
+注意：这台固件上存在「写账不动物件」的坑——`media_session --set` 返回成功但**不会真正改音量**（假成功；shell 直写通道被阉，连借 system uid 走 `cmd` 也会因 AppOps 包归属校验抛异常）；背光只写 `settings put` 也**不会改变实际亮度**，必须走寄存器直写。本项目已替你踩过这些坑。
+
+音量的解法是自研 [`VolDirectTool`](Assets/VolDirectTool.java)（约 60 行，源码随仓库）：经 TvService 的 `app_process` 以 system 身份运行，`Looper.prepareMainLooper()` + `ActivityThread.systemMain()` 拿到 system context 后直调 `AudioManager.setStreamVolume`——这正是小爱同学设音量的同一条路，一次调用瞬时生效。构建它只需 `javac` + Google Maven 的 r8.jar（d8），无需 Android SDK。
 
 ## 许可
 

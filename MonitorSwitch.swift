@@ -218,6 +218,29 @@ enum Mtk {
     }
 }
 
+// MARK: - 音量直写通道（与小爱同学同一条 AudioManager 路径，瞬时一步到位）
+
+enum VolDirect {
+    static let jarPath = Mtk.cacheDir + "/VolDirectTool.jar"
+
+    /// 部署自研直写工具：同样走 push + TvService cp
+    static func deployJar() -> Bool {
+        guard let local = Bundle.main.url(forResource: "VolDirectTool", withExtension: "jar")?.path,
+              Adb.push(local, "/sdcard/VolDirectTool.jar") else { return false }
+        Adb.tvServiceRun(["cp", "/sdcard/VolDirectTool.jar", jarPath])
+        return true
+    }
+
+    /// 直写音量（STREAM_MUSIC）；返回 nil 表示 adb 层失败
+    @discardableResult
+    static func set(_ value: Int) -> String? {
+        Adb.tvServiceRun([
+            "CLASSPATH=\(jarPath)", "/system/bin/app_process", Mtk.cacheDir,
+            "VolDirectTool", "set", "3", "\(value)",
+        ])
+    }
+}
+
 // MARK: - 状态与动作
 
 final class AppState: ObservableObject {
@@ -280,10 +303,12 @@ final class AppState: ObservableObject {
                 source = Int(Adb.shell("settings get global mitv.tvplayer.hdmi.last.source") ?? "")
                 volume = Self.parseVolume(Adb.shell("cmd media_session volume --stream 3 --get") ?? "")
                 backlight = Int(Adb.shell("settings get global picture_backlight") ?? "")
-                // 首次连上：部署寄存器工具并读一次真实背光校准（settings 账面可能与硬件不同步）
+                // 首次连上：部署寄存器/音量直写工具并读一次真实背光校准
                 if self?.jarReady != true {
                     self?.jarReady = true
-                    if Mtk.deployJar(), let real = Mtk.readBacklight() {
+                    _ = Mtk.deployJar()
+                    _ = VolDirect.deployJar()
+                    if let real = Mtk.readBacklight() {
                         backlight = real
                     }
                 }
@@ -356,32 +381,38 @@ final class AppState: ObservableObject {
     private func applyVolume(_ target: Int) {
         guard lastKnownVolume >= 0 else { return }
         let current = lastKnownVolume
-        let delta = target - current
-        guard delta != 0 else { return }
-
-        let keycode = delta > 0 ? "24" : "25" // 24=VOLUME_UP, 25=VOLUME_DOWN
-        let repeats = Array(repeating: keycode, count: min(abs(delta), 200)).joined(separator: " ")
-        let predicted = min(max(current + delta, 0), Int(volumeMax))
-        let sign = delta > 0 ? "+" : "-"
+        guard target != current else { return }
+        let predicted = min(max(target, 0), Int(volumeMax))
+        let sign = target > current ? "+" : "-"
         lastKnownVolume = predicted
         volume = Double(predicted)
-        volumeLog.info("音量 \(current, privacy: .public) → \(predicted, privacy: .public) (\(sign, privacy: .public)\(abs(delta), privacy: .public))")
+        volumeHoldUntil = Date().addingTimeInterval(1.2)
+        volumeLog.info("音量 \(current, privacy: .public) → \(predicted, privacy: .public) (\(sign, privacy: .public)\(abs(target - current), privacy: .public))")
 
         DispatchQueue.global(qos: .userInitiated).async {
-            // 大跳变连发可达数秒，放宽超时；串行队列保证不与其他指令交错
-            let command = "input keyevent \(repeats)"
-            if Adb.exec(["shell", command], timeout: 15)?.code != 0, Adb.connect() {
-                _ = Adb.shell(command, timeout: 15)
+            // 首选：VolDirectTool 直写（system 身份 + AudioManager，与小爱同路，瞬时）
+            VolDirect.set(predicted)
+            Thread.sleep(forTimeInterval: 0.5)
+            if let output = Adb.shell("cmd media_session volume --stream 3 --get"),
+               let actual = AppState.parseVolume(output), actual.value == predicted {
+                return // 直写成功
             }
-            // 发送完成后回读真实值校准（步进期间遥控器等外部操作可能造成偏差）
+            // 回退：keyevent 步进（固件限制 ~70ms/步）
+            var actualValue = current
+            if let output = Adb.shell("cmd media_session volume --stream 3 --get"),
+               let actual = AppState.parseVolume(output) {
+                actualValue = actual.value
+            }
+            let step = predicted - actualValue
+            guard step != 0 else { return }
+            let keycode = step > 0 ? "24" : "25" // 24=VOLUME_UP, 25=VOLUME_DOWN
+            let repeats = Array(repeating: keycode, count: min(abs(step), 200)).joined(separator: " ")
+            _ = Adb.exec(["shell", "input keyevent \(repeats)"], timeout: 15)
             Thread.sleep(forTimeInterval: 0.4)
             if let output = Adb.shell("cmd media_session volume --stream 3 --get"),
                let actual = AppState.parseVolume(output) {
                 DispatchQueue.main.async {
                     self.lastKnownVolume = actual.value
-                    if !self.isDraggingVolume, Date() >= self.volumeHoldUntil {
-                        self.volume = Double(actual.value)
-                    }
                 }
             }
         }

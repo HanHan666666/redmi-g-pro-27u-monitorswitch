@@ -42,11 +42,13 @@ if [ -f Assets/MenuBarMI.png ]; then
   cp Assets/MenuBarMI.png "$APP/Contents/Resources/MenuBarMI.png"
 fi
 
-# 寄存器工具（背光用，来自 Mimonitor_Toolbox，MIT）
-if [ -f Assets/MtkDirectTool.jar ]; then
-  mkdir -p "$APP/Contents/Resources"
-  cp Assets/MtkDirectTool.jar "$APP/Contents/Resources/MtkDirectTool.jar"
-fi
+# 设备端工具（寄存器直写来自 Mimonitor_Toolbox/MIT；音量直写为本项目自研）
+for jar in MtkDirectTool VolDirectTool; do
+  if [ -f "Assets/${jar}.jar" ]; then
+    mkdir -p "$APP/Contents/Resources"
+    cp "Assets/${jar}.jar" "$APP/Contents/Resources/${jar}.jar"
+  fi
+done
 
 codesign --force --sign - "$APP"
 echo "✅ 构建完成: $PWD/$APP"
