@@ -67,4 +67,4 @@ settings get global mitv.tvplayer.hdmi.last.source
 
 ## 许可
 
-[MIT](LICENSE)。内嵌的 `MtkDirectTool.jar` 来自 [Mimonitor_Toolbox](https://github.com/YiHoooong/Mimonitor_Toolbox)（MIT），MI 为小米公司商标，归小米所有。
+[MIT](LICENSE)。内嵌的 `MtkDirectTool.jar` 来自 [Mimonitor_Toolbox](https://github.com/YiHoooong/Mimonitor_Toolbox)（MIT）。
