@@ -1,0 +1,29 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build MonitorSwitch.app
+        run: ./build.sh
+
+      - name: Package (ditto zip)
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          ditto -c -k --keepParent "build/MonitorSwitch.app" "MonitorSwitch-${VERSION}-macOS.zip"
+          ls -la MonitorSwitch-*.zip
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: MonitorSwitch-*-macOS.zip
+          generate_release_notes: true
