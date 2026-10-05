@@ -47,6 +47,24 @@ enum Config {
 
 // MARK: - ADB
 
+/// 管道数据收集器：readabilityHandler 多线程回调安全累积
+private final class PipeCollector {
+    private let lock = NSLock()
+    private var data = Data()
+
+    func append(_ chunk: Data) {
+        lock.lock()
+        data.append(chunk)
+        lock.unlock()
+    }
+
+    var text: String {
+        lock.lock()
+        defer { lock.unlock() }
+        return String(data: data, encoding: .utf8) ?? ""
+    }
+}
+
 final class Adb {
     private static var cachedBinary: String?
 
@@ -71,44 +89,80 @@ final class Adb {
         return nil
     }
 
-    private static func run(_ path: String, _ args: [String]) -> (code: Int32, out: String) {
+    /// 所有设备 I/O 串行执行：长指令（音量连发可达数秒）不会与轮询/其他写入交错
+    private static let ioQueue = DispatchQueue(label: "monitorswitch.adb.io", qos: .userInitiated)
+
+    private static func run(_ path: String, _ args: [String], timeout: TimeInterval = 3) -> (code: Int32, out: String) {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: path)
         process.arguments = args
-        let stdout = Pipe()
-        process.standardOutput = stdout
-        process.standardError = Pipe() // 丢弃 stderr，保持输出干净
+        let stdoutPipe = Pipe()
+        let stderrPipe = Pipe()
+        process.standardOutput = stdoutPipe
+        process.standardError = stderrPipe
+
+        // 后台持续排空两个管道：子进程写满 64KB 缓冲会阻塞在 write 上导致永久死锁
+        let out = PipeCollector()
+        let err = PipeCollector()
+        stdoutPipe.fileHandleForReading.readabilityHandler = { handle in
+            let chunk = handle.availableData
+            out.append(chunk)
+            if chunk.isEmpty { handle.readabilityHandler = nil }
+        }
+        stderrPipe.fileHandleForReading.readabilityHandler = { handle in
+            let chunk = handle.availableData
+            err.append(chunk)
+            if chunk.isEmpty { handle.readabilityHandler = nil }
+        }
+
         do {
             try process.run()
-            process.waitUntilExit()
         } catch {
             return (-1, "")
         }
-        let data = stdout.fileHandleForReading.readDataToEndOfFile()
-        let text = String(data: data, encoding: .utf8)?
-            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        // 超时强杀：adb 碰上网络抖动可能无限挂起，绝不能拖死调用线程
+        let deadline = Date().addingTimeInterval(timeout)
+        while process.isRunning && Date() < deadline {
+            Thread.sleep(forTimeInterval: 0.05)
+        }
+        if process.isRunning {
+            process.terminate()
+            Thread.sleep(forTimeInterval: 0.3)
+            if process.isRunning { kill(process.processIdentifier, SIGKILL) }
+            return (-1, "")
+        }
+        Thread.sleep(forTimeInterval: 0.05) // 留时间给 handler 刷完残余数据
+        let text = out.text.trimmingCharacters(in: .whitespacesAndNewlines)
         return (process.terminationStatus, text)
     }
 
     /// adb -s <addr> ...；未配置地址或找不到 adb 返回 nil
-    static func exec(_ args: [String]) -> (code: Int32, out: String)? {
+    static func exec(_ args: [String], timeout: TimeInterval = 3) -> (code: Int32, out: String)? {
         guard let bin = binary(), let address = Config.deviceAddress else { return nil }
-        return run(bin, ["-s", address] + args)
+        var result: (code: Int32, out: String)?
+        ioQueue.sync { result = run(bin, ["-s", address] + args, timeout: timeout) }
+        return result
     }
 
     static func connect() -> Bool {
         guard let bin = binary(), let address = Config.deviceAddress else { return false }
-        _ = run(bin, ["connect", address])
-        return exec(["get-state"])?.out == "device"
+        var ok = false
+        ioQueue.sync {
+            _ = run(bin, ["connect", address])
+            ok = run(bin, ["-s", address, "get-state"]).out == "device"
+        }
+        return ok
     }
 
-    static func shell(_ command: String) -> String? {
-        exec(["shell", command])?.out
+    static func shell(_ command: String, timeout: TimeInterval = 3) -> String? {
+        exec(["shell", command], timeout: timeout)?.out
     }
 
     static func push(_ localPath: String, _ remotePath: String) -> Bool {
         guard let bin = binary(), let address = Config.deviceAddress else { return false }
-        return run(bin, ["-s", address, "push", localPath, remotePath]).code == 0
+        var code: Int32 = -1
+        ioQueue.sync { code = run(bin, ["-s", address, "push", localPath, remotePath], timeout: 10).code }
+        return code == 0
     }
 
     /// 借 TvService（系统权限）执行命令。parts 中的空格以字面量 ${IFS} 编码，
@@ -206,20 +260,18 @@ final class AppState: ObservableObject {
     }
 
     func refresh() {
-        let hasAddress = Config.deviceAddress != nil
-        let adbFound = Adb.binary() != nil
-        DispatchQueue.main.async { [weak self] in
-            self?.configured = hasAddress
-            self?.adbMissing = !adbFound
-        }
-        guard hasAddress, adbFound else {
-            DispatchQueue.main.async { [weak self] in
-                self?.online = false
-                self?.currentSource = nil
-            }
-            return
-        }
         DispatchQueue.global(qos: .utility).async { [weak self] in
+            let hasAddress = Config.deviceAddress != nil
+            let adbFound = Adb.binary() != nil // 首次会探测 adb 路径，不能放主线程
+            guard hasAddress, adbFound else {
+                DispatchQueue.main.async {
+                    self?.configured = hasAddress
+                    self?.adbMissing = !adbFound
+                    self?.online = false
+                    self?.currentSource = nil
+                }
+                return
+            }
             let online = Adb.connect() // 内部含 get-state 校验，未连上会自动重连
             var source: Int?
             var volume: (value: Int, max: Int)?
@@ -237,6 +289,8 @@ final class AppState: ObservableObject {
                 }
             }
             DispatchQueue.main.async {
+                self?.configured = hasAddress
+                self?.adbMissing = !adbFound
                 self?.online = online
                 self?.currentSource = source
                 if let backlight, Date() >= (self?.backlightHoldUntil ?? .distantPast) {
@@ -314,9 +368,10 @@ final class AppState: ObservableObject {
         volumeLog.info("音量 \(current, privacy: .public) → \(predicted, privacy: .public) (\(sign, privacy: .public)\(abs(delta), privacy: .public))")
 
         DispatchQueue.global(qos: .userInitiated).async {
+            // 大跳变连发可达数秒，放宽超时；串行队列保证不与其他指令交错
             let command = "input keyevent \(repeats)"
-            if Adb.exec(["shell", command])?.code != 0, Adb.connect() {
-                _ = Adb.shell(command)
+            if Adb.exec(["shell", command], timeout: 15)?.code != 0, Adb.connect() {
+                _ = Adb.shell(command, timeout: 15)
             }
             // 发送完成后回读真实值校准（步进期间遥控器等外部操作可能造成偏差）
             Thread.sleep(forTimeInterval: 0.4)
