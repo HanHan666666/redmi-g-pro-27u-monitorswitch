@@ -50,7 +50,7 @@ cd windows
 安装 [Inno Setup 6.3+](https://jrsoftware.org/isdl.php)，使用 PowerShell 7 打包：
 
 ```powershell
-.\package.ps1                    # 读取 VERSION 中的版本号
+.\package.ps1                    # 读取 VERSION.txt 中的版本号
 .\package.ps1 -Version 1.1.0
 ```
 
@@ -67,7 +67,7 @@ git tag windows-v1.1.0
 git push origin windows-v1.1.0
 ```
 
-构建与安装测试通过后，安装包、便携包和校验文件会自动出现在 GitHub Releases。后续版本更新 `VERSION`，并使用新的标签；无需修改工作流。
+构建与安装测试通过后，安装包、便携包和校验文件会自动出现在 GitHub Releases。后续版本更新 `VERSION.txt`，并使用新的标签；无需修改工作流。
 
 应用图标：
 

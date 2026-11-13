@@ -39,7 +39,7 @@ jobs:
           if ($env:GITHUB_REF_TYPE -eq 'tag') {
             $version = $env:GITHUB_REF_NAME -replace '^(windows-)?v', ''
           } else {
-            $baseVersion = (Get-Content windows/VERSION -Raw).Trim()
+            $baseVersion = (Get-Content windows/VERSION.txt -Raw).Trim()
             $version = "$baseVersion-dev.$env:GITHUB_RUN_NUMBER"
           }
           if ($version -notmatch '^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$') {
