@@ -1,10 +1,15 @@
-# MonitorSwitch — Redmi 显示器 G Pro 27U 的 macOS 菜单栏控制工具
+# MonitorSwitch — Redmi 显示器 G Pro 27U 控制工具（macOS 菜单栏 / Windows 托盘）
 
 ![MonitorSwitch 面板截图](screenshot.png)
 
-> A lightweight macOS menu bar app for the **Redmi G Pro 27U smart monitor** (2025 & 2026): switch input sources, adjust backlight and volume over wireless ADB — nothing needs to be installed on the monitor.
+> A lightweight macOS menu bar app and Windows system-tray app for the **Redmi G Pro 27U smart monitor** (2025 & 2026): switch input sources, adjust backlight and volume over wireless ADB — nothing needs to be installed on the monitor.
 
-在 Mac 菜单栏上一键切换 Redmi G Pro 27U 智能显示器的**信号源**（DP / HDMI 1 / HDMI 2 / USB-C）、调节**背光**和**音量**。显示器端无需安装任何应用，走无线 ADB。
+在 macOS 菜单栏 / Windows 桌面托盘中一键切换 Redmi G Pro 27U 智能显示器的**信号源**（DP / HDMI 1 / HDMI 2 / USB-C）、调节**背光**和**音量**。显示器端无需安装任何应用，走无线 ADB。
+
+| 平台 | 实现 | 入口 |
+|---|---|---|
+| macOS | SwiftUI 菜单栏应用（`MonitorSwitch.swift`，单文件） | 菜单栏图标 |
+| Windows | **C++ / C++/WinRT + WinUI 3** 原生桌面应用 | 桌面右下角托盘图标 |
 
 ## 兼容性
 
@@ -17,30 +22,102 @@
 
 ## 功能
 
-- 🖥 菜单栏面板一键切换信号源：DP / HDMI 1 / HDMI 2 / USB-C，当前源实时打勾
+macOS 与 Windows 两端功能对齐：
+
+- 🖥 一键切换信号源：DP / HDMI 1 / HDMI 2 / USB-C，当前源实时打勾
 - 🔆 背光拖动条（1–100）——寄存器直写 `g_disp__disp_back_light` + `PIC_MODE_CHANGED` 广播刷新 + settings 记账，松手即时生效（与 Mimonitor_Toolbox 同款三步）
 - 🔊 音量拖动条（0–100）+ 静音按钮——**一步到位**：自研 `VolDirectTool` 经 TvService 以 system 身份直调 `AudioManager.setStreamVolume`（与小爱同学同一条生效路径），瞬时生效；异常时自动回退 keyevent 步进
-- ● 连接状态轮询（10s）+ 自动重连，掉线图标变划线显示器
+- ● 连接状态轮询（10s）+ 自动重连，掉线时图标变为划线显示器
 - 首次连接自动向显示器部署内嵌的 `MtkDirectTool.jar`（5KB，MIT）并读寄存器校准真实背光
-- 首次运行设置设备地址，存 `UserDefaults`，代码不写死任何地址
+- 首次运行设置设备地址，配置不写死
+
+Windows 版额外的桌面平台适配：
+
+- 托盘图标四态（在线 / 离线 / 未配置 / 未找到 adb），按任务栏明暗自动反色
+- 左键托盘图标开合面板；右键菜单：打开面板 / 刷新 / ADB 设置… / 退出
+- 无边框 WinUI 3 弹出面板，固定在托盘所在屏幕的任务栏边缘，点击别处自动收起
+- 单实例运行，重复启动会唤出已有实例的面板
+- 配置存注册表 `HKCU\Software\Wuhan\MonitorSwitch`（对应 macOS 的 UserDefaults）
 
 ## 要求
+
+### macOS
 
 - macOS 13+
 - 本机装有 adb（`brew install android-platform-tools`，或 Android SDK platform-tools）
 
+### Windows
+
+- Windows 10 1809（17763）或更高 / Windows 11，x64
+- 本机装有 adb（Android platform-tools）。程序会自动在 PATH、`%LOCALAPPDATA%\Android\Sdk\platform-tools`、Scoop、Chocolatey、WinGet、`C:\platform-tools` 等位置查找
+- 运行**不需要**安装 Windows App SDK 运行时（构建产物为自包含部署）
+- 从源码构建需要 Visual Studio 2022（「使用 C++ 的桌面开发」工作负载）+ Windows 11 SDK 10.0.22621
+
 ## 构建与安装
+
+### macOS
 
 ```bash
 ./build.sh          # 产出 build/MonitorSwitch.app（ad-hoc 签名，本机自用）
 ./install.sh        # 构建并安装到 /Applications，然后启动
 ```
 
+### Windows
+
+从 [Releases](https://github.com/HanHan666666/redmi-g-pro-27u-monitorswitch/releases) 下载 `MonitorSwitch-*-Windows-x64-Setup.exe` 安装。安装程序按当前用户安装，创建开始菜单入口，并支持卸载；无需管理员权限。也可下载 `Windows-x64.zip`，解压后运行 `MonitorSwitch.exe`。
+
+安装包和便携包均包含 Windows App SDK 与 Visual C++ 运行库。ADB 仍需单独安装（见「要求」）。
+
+从源码构建：
+
+```powershell
+cd windows
+.\build.ps1                 # Release x64
+# 或 .\build.ps1 -Configuration Debug
+```
+
+产物：`windows\build\Release\MonitorSwitch.exe`，同目录下的 DLL / jar 需一起拷贝（整个 `Release` 目录即可使用）。
+
+使用 PowerShell 7 和 [Inno Setup 6.3+](https://jrsoftware.org/isdl.php) 生成安装包：
+
+```powershell
+.\windows\package.ps1
+# 或指定版本：.\windows\package.ps1 -Version 1.1.0
+```
+
+打包产物位于 `windows\dist\`：安装程序、便携 ZIP、SHA-256 校验文件。发布流程会验证安装、覆盖安装、WinUI 面板启动与卸载。
+
+GitHub Actions 在推送 `main`、提交 Windows 相关 PR 或手动运行时自动构建，包可从 Actions 的 Artifacts 下载。推送 `windows-v1.1.0` 这样的标签会自动创建 Windows Release；`v*` 标签同时触发原有 macOS 发布流程。
+
+应用图标由 `python windows\tools\make_icon.py` 生成（仓库已包含生成好的 `AppIcon.ico`，只有想改图标时才需要重跑）。
+
 ## 使用
 
-1. 显示器上开启「网络 ADB 调试」（设置 → 账号与安全 → ADB 调试），Mac 与显示器同一局域网
+1. 显示器上开启「网络 ADB 调试」（设置 → 账号与安全 → ADB 调试），电脑与显示器同一局域网
 2. 首次启动会弹出 ADB 设置面板，填入显示器的 ADB 地址（如 `192.168.1.100:5555`，端口可省略）
 3. 首次连接时显示器会弹出授权对话框，用遥控器选「始终允许」
+4. macOS 点击菜单栏图标、Windows 左键点击托盘图标即可打开面板；Windows 右键托盘图标还有快捷菜单
+
+## 目录结构
+
+```
+MonitorSwitch.swift        macOS 版（SwiftUI，单文件）
+build.sh / install.sh      macOS 构建 / 安装脚本
+windows/                   Windows 版（C++/WinUI 3）
+  MonitorSwitch.vcxproj    项目文件（NuGet：Microsoft.WindowsAppSDK 1.8）
+  App.h / App.cpp         应用入口：轮询定时器、托盘图标、单实例
+  MainWindow.h / .cpp      托盘弹出面板（信号源 / 背光 / 音量）
+  SettingsWindow.h / .cpp  ADB 地址设置窗口
+  Adb.cpp                  adb 进程封装：参数转义、管道并发读取、超时强杀、串行化
+  Device.cpp               Mtk / VolDirect 通道与音量解析
+  AppState.cpp             状态机、轮询、设备动作（音量直写 + keyevent 回退）
+  TrayIcon.cpp             Shell_NotifyIcon + GDI+ 动态绘制图标
+  Config.cpp               注册表读写、地址规范化
+  Assets/                  内嵌设备端 jar 与应用图标
+  build.ps1                构建脚本
+  package.ps1              安装包 / 便携包 / 校验文件打包脚本
+  installer/               Inno Setup 安装程序定义
+```
 
 ## 原理与致谢
 
@@ -62,6 +139,8 @@ settings get global mitv.tvplayer.hdmi.last.source
 注意：这台固件上存在「写账不动物件」的坑——`media_session --set` 返回成功但**不会真正改音量**（假成功；shell 直写通道被阉，连借 system uid 走 `cmd` 也会因 AppOps 包归属校验抛异常）；背光只写 `settings put` 也**不会改变实际亮度**，必须走寄存器直写。本项目已替你踩过这些坑。
 
 音量的解法是自研 [`VolDirectTool`](Assets/VolDirectTool.java)（约 60 行，源码随仓库）：经 TvService 的 `app_process` 以 system 身份运行，`Looper.prepareMainLooper()` + `ActivityThread.systemMain()` 拿到 system context 后直调 `AudioManager.setStreamVolume`——这正是小爱同学设音量的同一条路，一次调用瞬时生效。构建它只需 `javac` + Google Maven 的 r8.jar（d8），无需 Android SDK。
+
+Windows 版完全复用同一套设备命令；与 macOS 版的实现差异主要在宿主层：用 `CreateProcessW` + 双管道并发读取 + 超时强杀代替 `Process`，用互斥量串行化设备 I/O（等价于 macOS 的串行 `DispatchQueue`），用注册表代替 `UserDefaults`，用 Win32 托盘 + WinUI 3 无边框窗口代替 `MenuBarExtra`。
 
 ## 许可
 

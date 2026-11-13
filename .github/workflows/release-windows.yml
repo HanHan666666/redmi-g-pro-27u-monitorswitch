@@ -1,0 +1,106 @@
+name: Windows build and release
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*', 'windows-v*']
+    paths:
+      - 'windows/**'
+      - '.github/workflows/release-windows.yml'
+      - 'LICENSE'
+  pull_request:
+    paths:
+      - 'windows/**'
+      - '.github/workflows/release-windows.yml'
+      - 'LICENSE'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+jobs:
+  build:
+    runs-on: windows-2022
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Determine package version
+        id: version
+        shell: pwsh
+        run: |
+          if ($env:GITHUB_REF_TYPE -eq 'tag') {
+            $version = $env:GITHUB_REF_NAME -replace '^(windows-)?v', ''
+          } else {
+            $baseVersion = (Get-Content windows/VERSION -Raw).Trim()
+            $version = "$baseVersion-dev.$env:GITHUB_RUN_NUMBER"
+          }
+          if ($version -notmatch '^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$') {
+            throw "Invalid package version: $version"
+          }
+          "value=$version" >> $env:GITHUB_OUTPUT
+
+      - name: Build MonitorSwitch (WinUI 3, x64)
+        shell: pwsh
+        run: ./windows/build.ps1
+
+      - name: Package installer and portable ZIP
+        shell: pwsh
+        env:
+          PACKAGE_VERSION: ${{ steps.version.outputs.value }}
+        run: ./windows/package.ps1 -Version $env:PACKAGE_VERSION
+
+      - name: Test install, upgrade, WinUI startup, and uninstall
+        shell: pwsh
+        env:
+          PACKAGE_VERSION: ${{ steps.version.outputs.value }}
+        run: ./windows/tests/InstallerSmoke.ps1 -SetupPath "$pwd/windows/dist/MonitorSwitch-$env:PACKAGE_VERSION-Windows-x64-Setup.exe"
+
+      - name: Upload packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: MonitorSwitch-Windows-x64
+          path: windows/dist/*
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload diagnostic logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Windows-build-logs
+          path: |
+            ${{ runner.temp }}/MonitorSwitch-installer-logs/*
+            ~/AppData/Local/MonitorSwitch/*.log
+          if-no-files-found: ignore
+
+  publish:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: MonitorSwitch-Windows-x64
+          path: packages
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: packages/*
+          fail_on_unmatched_files: true
+          generate_release_notes: true
+          body: |
+            Windows x64：下载 `MonitorSwitch-*-Windows-x64-Setup.exe` 安装；或下载 ZIP 解压运行。
+
+            安装包包含 Windows App SDK 和 Visual C++ 运行库，按当前用户安装，无需管理员权限。
+            仍需单独安装 Android platform-tools（ADB），并在显示器开启网络 ADB 调试。

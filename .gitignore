@@ -1,2 +1,18 @@
 build/
 .DS_Store
+
+# Windows
+windows/build/
+windows/obj/
+windows/.packages/
+windows/restore*.log
+windows/*.log
+windows/*.bak
+windows/preprocessed.xml
+windows/XamlMetaDataProvider.cpp
+windows/XamlMetaDataProvider.idl
+windows/dist/
+windows/tools/*.exe
+windows/tools/*.obj
+.vs/
+*.user
