@@ -1,6 +1,8 @@
 # MonitorSwitch — Redmi 显示器 G Pro 27U 控制工具（macOS 菜单栏 / Windows 托盘）
 
-![MonitorSwitch 面板截图](screenshot.png)
+| macOS 菜单栏 | Windows 托盘 |
+| :---: | :---: |
+| <img src="screenshot.png" alt="MonitorSwitch macOS 菜单栏面板" width="360"> | <img src="screenshot-windows.png" alt="MonitorSwitch Windows 11 托盘面板" width="360"> |
 
 > A lightweight macOS menu bar app and Windows system-tray app for the **Redmi G Pro 27U smart monitor** (2025 & 2026): switch input sources, adjust backlight and volume over wireless ADB — nothing needs to be installed on the monitor.
 
