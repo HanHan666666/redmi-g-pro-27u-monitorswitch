@@ -47,18 +47,18 @@ $startInfo.UseShellExecute = $false
 $startInfo.CreateNoWindow = $true
 $startInfo.Environment['MONITORSWITCH_NO_AUTO_HIDE'] = '1'
 $application = [Diagnostics.Process]::Start($startInfo)
+$appLog = Join-Path $env:LOCALAPPDATA 'MonitorSwitch\app.log'
 try {
     Start-Sleep -Seconds 8
     if ($application.HasExited) { throw "MonitorSwitch exited during startup: $($application.ExitCode)" }
-    $appLog = Join-Path $env:LOCALAPPDATA 'MonitorSwitch\app.log'
     $text = Get-Content -LiteralPath $appLog -Raw -Encoding unicode
     if ($text -notmatch 'panel created' -or $text -match 'UnhandledException|OnLaunched hresult_error|OnLaunched unknown exception') {
         throw 'The installed WinUI panel did not start successfully. See app.log.'
     }
-    Copy-Item -LiteralPath $appLog -Destination $logDir
 }
 finally {
     if (-not $application.HasExited) { $application.Kill($true); $application.WaitForExit() }
+    if (Test-Path -LiteralPath $appLog) { Copy-Item -LiteralPath $appLog -Destination $logDir }
 }
 
 Invoke-Installer (Join-Path $installDir 'unins000.exe') @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/LOG=$logDir\uninstall.log")
@@ -68,11 +68,13 @@ if (Get-ItemProperty -LiteralPath $runKey -Name MonitorSwitch -ErrorAction Silen
 }
 
 # A portable copy can own the preference independently of this installation.
-Invoke-Installer $SetupPath ($installArgs + "/LOG=$logDir\reinstall.log")
+# Use a fresh directory: Inno's self-deletion helper may still be cleaning the old uninstaller.
+$portableTestDir = Join-Path $env:RUNNER_TEMP 'MonitorSwitch portable ownership test'
+Invoke-Installer $SetupPath @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-', "/DIR=$portableTestDir", "/LOG=$logDir\reinstall.log")
 $portableCommand = '"C:\Portable MonitorSwitch\MonitorSwitch.exe"'
 Set-ItemProperty -LiteralPath $runKey -Name MonitorSwitch -Value $portableCommand -Type String
 try {
-    Invoke-Installer (Join-Path $installDir 'unins000.exe') @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/LOG=$logDir\portable-uninstall.log")
+    Invoke-Installer (Join-Path $portableTestDir 'unins000.exe') @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/LOG=$logDir\portable-uninstall.log")
     if ((Get-ItemPropertyValue -LiteralPath $runKey -Name MonitorSwitch) -ne $portableCommand) {
         throw 'Uninstall removed the startup preference of a portable copy.'
     }

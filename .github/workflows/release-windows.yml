@@ -86,7 +86,6 @@ jobs:
           name: Windows-build-logs
           path: |
             ${{ runner.temp }}/MonitorSwitch-installer-logs/*
-            ~/AppData/Local/MonitorSwitch/*.log
           if-no-files-found: ignore
 
   publish:
