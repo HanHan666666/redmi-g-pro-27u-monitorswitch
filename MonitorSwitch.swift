@@ -611,7 +611,8 @@ struct PanelContent: View {
                             .frame(width: 20, height: 20)
                             .contentShape(Rectangle())
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.borderless)
+                    .modifier(SubtleHoverFeedback(cornerRadius: 5))
                     .disabled(!state.online)
                     .accessibilityLabel("切换静音")
                     .help("切换静音")
@@ -641,15 +642,25 @@ struct PanelContent: View {
             HStack {
                 Button { state.openSettings() } label: {
                     Label("设置…", systemImage: "gearshape")
+                        .padding(.horizontal, 6)
+                        .frame(height: 24)
                 }
+                .modifier(SubtleHoverFeedback(cornerRadius: 6))
                 Spacer()
                 Button { state.refresh() } label: {
                     Image(systemName: "arrow.clockwise")
+                        .frame(width: 24, height: 24)
                 }
+                .modifier(SubtleHoverFeedback(cornerRadius: 6))
                 .accessibilityLabel("刷新连接状态")
                 .help("刷新连接状态")
-                Button("退出") { NSApplication.shared.terminate(nil) }
-                    .padding(.leading, 8)
+                Button { NSApplication.shared.terminate(nil) } label: {
+                    Text("退出")
+                        .padding(.horizontal, 6)
+                        .frame(height: 24)
+                }
+                .modifier(SubtleHoverFeedback(cornerRadius: 6))
+                .padding(.leading, 4)
             }
             .buttonStyle(.borderless)
             .foregroundColor(.secondary)
@@ -721,12 +732,35 @@ struct PanelContent: View {
     }
 }
 
+/// 只调整背景明暗；不缩放控件，且遵循禁用状态与系统的减少动态效果设置。
+private struct SubtleHoverFeedback: ViewModifier {
+    let cornerRadius: CGFloat
+    @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var isHovering = false
+
+    func body(content: Content) -> some View {
+        content
+            .background {
+                RoundedRectangle(cornerRadius: cornerRadius)
+                    .fill(Color.primary.opacity(isEnabled && isHovering ? 0.055 : 0))
+            }
+            .contentShape(RoundedRectangle(cornerRadius: cornerRadius))
+            .onHover { isHovering = $0 && isEnabled }
+            .onChange(of: isEnabled) { enabled in
+                if !enabled { isHovering = false }
+            }
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: isEnabled && isHovering)
+    }
+}
+
 private struct SourceButtonStyle: ButtonStyle {
     let selected: Bool
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .foregroundColor(selected ? .accentColor : .primary)
+            .modifier(SubtleHoverFeedback(cornerRadius: 9))
             .background {
                 RoundedRectangle(cornerRadius: 9)
                     .fill(selected ? Color.accentColor.opacity(0.14) : Color.primary.opacity(0.045))

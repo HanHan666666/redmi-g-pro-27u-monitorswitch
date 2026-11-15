@@ -63,8 +63,9 @@ jobs:
           generate_release_notes: true
           body: |
             macOS ${{ env.VERSION }} 更新：
-            - 优化菜单栏面板的连接信息、信号源选中样式、滑块和底栏布局，适配系统深浅色。
-            - 优化显示器设置窗口，说明文字自动换行，支持 Esc 关闭。
+            - 为信号源、设置、刷新、退出和静音按钮加入轻微的悬停高亮，适配系统深浅色。
+            - 调整底栏按钮的内边距与点击区域，修正设置按钮高亮紧贴文字的问题。
+            - 禁用按钮不响应悬停高亮，并遵循系统的「减少动态效果」设置。
 
             下载 macOS ZIP，解压后将 MonitorSwitch.app 拖入「应用程序」文件夹。
             适用于 macOS 13 及以上的 Apple Silicon Mac。仍需单独安装 Android platform-tools（ADB），并在显示器上开启网络 ADB 调试。
