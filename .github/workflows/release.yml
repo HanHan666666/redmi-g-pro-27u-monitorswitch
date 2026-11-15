@@ -3,22 +3,33 @@ name: macOS build and release
 on:
   push:
     tags: ["v*", "macos-v*"]
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing release tag (for example macos-v1.2.0)
+        required: true
+        type: string
+
+env:
+  RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
 
 permissions:
   contents: write
 
 jobs:
   release:
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
 
       - name: Verify release version
         shell: bash
         run: |
           VERSION="$(tr -d '\r\n' < VERSION.txt)"
-          TAG_VERSION="${GITHUB_REF_NAME#macos-}"
+          TAG_VERSION="${RELEASE_TAG#macos-}"
           test "${TAG_VERSION#v}" = "$VERSION"
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
 
@@ -43,6 +54,7 @@ jobs:
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ env.RELEASE_TAG }}
           name: MonitorSwitch ${{ env.VERSION }} for macOS
           files: |
             MonitorSwitch-*-macOS.zip
