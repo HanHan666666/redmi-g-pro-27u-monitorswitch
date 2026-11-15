@@ -6,6 +6,7 @@
 #include <microsoft.ui.xaml.window.h>
 
 #include "Config.h"
+#include "Startup.h"
 #include "UiTheme.h"
 
 using namespace winrt;
@@ -21,7 +22,7 @@ SettingsWindow::SettingsWindow()
     m_window.SystemBackdrop(DesktopAcrylicBackdrop());
     check_hresult(m_window.as<IWindowNative>()->get_WindowHandle(&m_hwnd));
     m_appWindow = m_window.AppWindow();
-    m_appWindow.Title(L"ADB 设置 · MonitorSwitch");
+    m_appWindow.Title(L"设置 · MonitorSwitch");
     if (auto presenter = m_appWindow.Presenter().try_as<OverlappedPresenter>())
     {
         presenter.IsResizable(false);
@@ -57,7 +58,7 @@ void SettingsWindow::BuildUi()
     auto heading = StackPanel();
     heading.Spacing(8);
     TextBlock title;
-    title.Text(L"连接显示器");
+    title.Text(L"设置");
     title.FontSize(24);
     title.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());
     heading.Children().Append(title);
@@ -101,17 +102,37 @@ void SettingsWindow::BuildUi()
     m_errorInfo.IsOpen(false);
     content.Children().Append(m_errorInfo);
 
+    auto startupSection = StackPanel();
+    startupSection.Spacing(8);
+    m_startupSwitch = ToggleSwitch();
+    m_startupSwitch.Header(box_value(L"开机自启"));
+    Automation::AutomationProperties::SetName(m_startupSwitch, L"开机自启");
+    m_startupSwitch.Toggled([this](auto const&, auto const&) { ChangeStartup(); });
+    startupSection.Children().Append(m_startupSwitch);
+    TextBlock startupHint;
+    startupHint.Text(L"登录 Windows 后自动启动并驻留托盘，切换立即生效。");
+    startupHint.FontSize(12);
+    startupHint.TextWrapping(TextWrapping::Wrap);
+    startupHint.Foreground(Application::Current().Resources().Lookup(box_value(L"TextFillColorSecondaryBrush")).as<Brush>());
+    startupSection.Children().Append(startupHint);
+    m_startupError = InfoBar();
+    m_startupError.Severity(InfoBarSeverity::Error);
+    m_startupError.IsClosable(false);
+    m_startupError.IsOpen(false);
+    startupSection.Children().Append(m_startupError);
+    content.Children().Append(startupSection);
+
     auto buttons = StackPanel();
     buttons.Orientation(Orientation::Horizontal);
     buttons.HorizontalAlignment(HorizontalAlignment::Right);
     buttons.Spacing(8);
     Button cancel;
-    cancel.Content(box_value(L"取消"));
+    cancel.Content(box_value(L"关闭"));
     cancel.MinWidth(88);
     cancel.Click([this](auto const&, auto const&) { Hide(); });
     buttons.Children().Append(cancel);
     Button save;
-    save.Content(box_value(L"保存"));
+    save.Content(box_value(L"保存地址"));
     save.MinWidth(88);
     save.Style(Application::Current().Resources().Lookup(box_value(L"AccentButtonStyle")).as<Style>());
     save.Click([this](auto const&, auto const&) { Save(); });
@@ -162,8 +183,39 @@ void SettingsWindow::Save()
     if (OnSaved) OnSaved();
 }
 
+void SettingsWindow::SyncStartupSwitch()
+{
+    auto enabled = Startup::IsEnabled();
+    m_syncingStartup = true;
+    m_startupSwitch.IsOn(enabled.value_or(false));
+    m_startupSwitch.IsEnabled(enabled.has_value());
+    m_syncingStartup = false;
+    m_startupError.Message(L"无法读取 Windows 启动项，请检查权限后重新打开设置。");
+    m_startupError.IsOpen(!enabled.has_value());
+}
+
+void SettingsWindow::ChangeStartup()
+{
+    if (m_syncingStartup) return;
+    bool enabled = m_startupSwitch.IsOn();
+    if (Startup::SetEnabled(enabled))
+    {
+        m_startupError.IsOpen(false);
+    }
+    else
+    {
+        m_syncingStartup = true;
+        m_startupSwitch.IsOn(!enabled);
+        m_syncingStartup = false;
+        m_startupError.Message(L"无法更改开机自启设置，请检查启动项权限或应用路径长度后重试。");
+        m_startupError.IsOpen(true);
+    }
+    ResizeToContent();
+}
+
 void SettingsWindow::Show()
 {
+    SyncStartupSwitch();
     // 重复唤出时保留正在编辑的内容。
     if (!m_appWindow.IsVisible())
     {

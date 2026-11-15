@@ -1,5 +1,5 @@
 #ifndef AppVersion
-  #define AppVersion "1.1.0"
+  #define AppVersion "1.2.0"
 #endif
 #ifndef SourceDir
   #error SourceDir must point to the staged application directory.
@@ -50,3 +50,16 @@ Name: "{autodesktop}\MonitorSwitch"; Filename: "{app}\MonitorSwitch.exe"; Tasks:
 
 [Run]
 Filename: "{app}\MonitorSwitch.exe"; Description: "Launch MonitorSwitch"; Flags: nowait postinstall skipifsilent
+
+[Code]
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+var
+  StartupCommand: String;
+begin
+  { Only remove the entry belonging to this installation, preserving portable copies. }
+  if (CurUninstallStep = usUninstall) and
+     RegQueryStringValue(HKCU, 'Software\Microsoft\Windows\CurrentVersion\Run',
+       'MonitorSwitch', StartupCommand) and
+     (CompareText(StartupCommand, '"' + ExpandConstant('{app}\MonitorSwitch.exe') + '"') = 0) then
+    RegDeleteValue(HKCU, 'Software\Microsoft\Windows\CurrentVersion\Run', 'MonitorSwitch');
+end;

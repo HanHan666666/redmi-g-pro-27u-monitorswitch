@@ -270,7 +270,7 @@ void MainWindow::BuildUi()
     AddColumn(footer, GridUnitType::Star, 1);
     AddColumn(footer, GridUnitType::Auto, 0);
 
-    auto settingsButton = CreateSmallButton(L"ADB 设置…");
+    auto settingsButton = CreateSmallButton(L"设置…");
     settingsButton.Click([this](auto const&, auto const&) { OpenSettings(); });
     footer.Children().Append(settingsButton);
 

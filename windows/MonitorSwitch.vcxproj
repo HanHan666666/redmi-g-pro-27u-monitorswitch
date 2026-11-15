@@ -114,6 +114,7 @@
     <ClInclude Include="MainWindow.h" />
     <ClInclude Include="PanelPlacement.h" />
     <ClInclude Include="SettingsWindow.h" />
+    <ClInclude Include="Startup.h" />
     <ClInclude Include="Adb.h" />
     <ClInclude Include="AppState.h" />
     <ClInclude Include="Config.h" />
@@ -133,6 +134,9 @@
     <ClCompile Include="App.cpp" />
     <ClCompile Include="MainWindow.cpp" />
     <ClCompile Include="SettingsWindow.cpp" />
+    <ClCompile Include="Startup.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
     <ClCompile Include="Adb.cpp" />
     <ClCompile Include="AppState.cpp" />
     <ClCompile Include="Config.cpp" />

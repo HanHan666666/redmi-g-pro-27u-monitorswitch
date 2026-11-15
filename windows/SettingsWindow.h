@@ -22,10 +22,15 @@ private:
     void ResizeToContent();
     void CenterOnScreen();
     void ApplyTheme();
+    void SyncStartupSwitch();
+    void ChangeStartup();
     winrt::Microsoft::UI::Xaml::Window m_window{ nullptr };
     winrt::Microsoft::UI::Windowing::AppWindow m_appWindow{ nullptr };
     HWND m_hwnd{ nullptr };
     winrt::Microsoft::UI::Xaml::Controls::Grid m_root{ nullptr };
     winrt::Microsoft::UI::Xaml::Controls::TextBox m_addressField{ nullptr };
     winrt::Microsoft::UI::Xaml::Controls::InfoBar m_errorInfo{ nullptr };
+    winrt::Microsoft::UI::Xaml::Controls::ToggleSwitch m_startupSwitch{ nullptr };
+    winrt::Microsoft::UI::Xaml::Controls::InfoBar m_startupError{ nullptr };
+    bool m_syncingStartup{ false };
 };

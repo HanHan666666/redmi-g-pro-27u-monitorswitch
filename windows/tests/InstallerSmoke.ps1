@@ -27,8 +27,15 @@ $logDir = Join-Path $env:RUNNER_TEMP 'MonitorSwitch-installer-logs'
 New-Item -ItemType Directory -Path $logDir -Force | Out-Null
 $installArgs = @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-', "/DIR=$installDir")
 Invoke-Installer $SetupPath ($installArgs + "/LOG=$logDir\install.log")
+$runKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
+$startupCommand = '"' + (Join-Path $installDir 'MonitorSwitch.exe') + '"'
+if (-not (Test-Path -LiteralPath $runKey)) { New-Item -Path $runKey -Force | Out-Null }
+Set-ItemProperty -LiteralPath $runKey -Name MonitorSwitch -Value $startupCommand -Type String
 # Installing a second time must update the same installation successfully.
 Invoke-Installer $SetupPath ($installArgs + "/LOG=$logDir\upgrade.log")
+if ((Get-ItemPropertyValue -LiteralPath $runKey -Name MonitorSwitch) -ne $startupCommand) {
+    throw 'Upgrade changed the startup preference.'
+}
 
 foreach ($name in @('MonitorSwitch.exe', 'unins000.exe', 'Microsoft.ui.xaml.dll', 'vcruntime140.dll', 'MtkDirectTool.jar', 'VolDirectTool.jar')) {
     if (-not (Test-Path -LiteralPath (Join-Path $installDir $name))) { throw "Installed payload is missing $name." }
@@ -56,4 +63,21 @@ finally {
 
 Invoke-Installer (Join-Path $installDir 'unins000.exe') @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/LOG=$logDir\uninstall.log")
 if (Test-Path -LiteralPath (Join-Path $installDir 'MonitorSwitch.exe')) { throw 'Uninstall left the application executable behind.' }
-Write-Host 'Install, upgrade, WinUI startup, and uninstall passed.'
+if (Get-ItemProperty -LiteralPath $runKey -Name MonitorSwitch -ErrorAction SilentlyContinue) {
+    throw 'Uninstall left its startup entry behind.'
+}
+
+# A portable copy can own the preference independently of this installation.
+Invoke-Installer $SetupPath ($installArgs + "/LOG=$logDir\reinstall.log")
+$portableCommand = '"C:\Portable MonitorSwitch\MonitorSwitch.exe"'
+Set-ItemProperty -LiteralPath $runKey -Name MonitorSwitch -Value $portableCommand -Type String
+try {
+    Invoke-Installer (Join-Path $installDir 'unins000.exe') @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/LOG=$logDir\portable-uninstall.log")
+    if ((Get-ItemPropertyValue -LiteralPath $runKey -Name MonitorSwitch) -ne $portableCommand) {
+        throw 'Uninstall removed the startup preference of a portable copy.'
+    }
+}
+finally {
+    Remove-ItemProperty -LiteralPath $runKey -Name MonitorSwitch -ErrorAction SilentlyContinue
+}
+Write-Host 'Install, upgrade, WinUI startup, uninstall, and startup preference cleanup passed.'

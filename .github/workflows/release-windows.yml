@@ -51,6 +51,14 @@ jobs:
         shell: pwsh
         run: ./windows/build.ps1
 
+      - name: Test startup registration in an isolated registry
+        shell: pwsh
+        run: |
+          msbuild windows/tests/StartupTests.vcxproj /m /nologo /p:Configuration=Release /p:Platform=x64 /v:minimal
+          if ($LASTEXITCODE -ne 0) { throw 'Startup tests failed to build.' }
+          & './windows/build/tests/startup tests/StartupTests.exe'
+          if ($LASTEXITCODE -ne 0) { throw 'Startup registration tests failed.' }
+
       - name: Package installer and portable ZIP
         shell: pwsh
         env:

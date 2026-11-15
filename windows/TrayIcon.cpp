@@ -351,7 +351,7 @@ void TrayIcon::ShowContextMenu()
     }
     AppendMenuW(menu, MF_STRING, 1, L"打开面板");
     AppendMenuW(menu, MF_STRING, 2, L"刷新");
-    AppendMenuW(menu, MF_STRING, 3, L"ADB 设置…");
+    AppendMenuW(menu, MF_STRING, 3, L"设置…");
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(menu, MF_STRING, 4, L"退出");
 

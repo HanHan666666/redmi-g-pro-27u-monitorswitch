@@ -19,7 +19,8 @@ Redmi 显示器 G Pro 27U 的 Windows 托盘控制工具：切换信号源（DP 
 | ADB 地址设置（自动补 `:5555`） | ✅ | ✅ |
 | 配置存储 | UserDefaults | `HKCU\Software\Wuhan\MonitorSwitch` |
 | 单实例 | 系统保证 | 命名互斥量 + 托盘窗口消息 |
-| 托盘右键菜单 | — | 打开面板 / 刷新 / ADB 设置… / 退出 |
+| 开机自启 | — | 设置中开启，登录后自动驻留托盘 |
+| 托盘右键菜单 | — | 打开面板 / 刷新 / 设置… / 退出 |
 
 ## 要求
 
@@ -81,6 +82,7 @@ python tools\make_icon.py      # 生成 Assets\AppIcon.ico（仓库已包含，�
 2. 首次启动自动弹出 ADB 设置窗口，填入显示器地址（如 `192.168.1.100:5555`，端口可省略）
 3. 显示器首次连接会弹出授权，用遥控器选「始终允许」
 4. 左键托盘图标开/合面板；右键托盘图标有快捷菜单
+5. 需要开机自启时，打开「设置」并开启「开机自启」；开关立即生效，与「保存地址」相互独立。关闭开关即可移除启动项
 
 ## 实现说明
 
@@ -91,6 +93,7 @@ python tools\make_icon.py      # 生成 Assets\AppIcon.ico（仓库已包含，�
 - **MainWindow**：`OverlappedPresenter` 去边框/标题栏、置顶、不进 Alt+Tab；Win11 用 `DWMWA_WINDOW_CORNER_PREFERENCE` 圆角，Win10 用 `SetWindowRgn` 兜底；面板位置由 `Shell_NotifyIconGetRect` 计算，点击别处（窗口失活）自动收起。
 - **App**：纯 C++ 界面通过 `IXamlMetadataProvider` 转交 WinUI 控件元数据，并合并 `XamlControlsResources`，使用系统 Fluent 控件模板。
 - **SettingsWindow**：原生 WinUI 3 `TextBox` + `InfoBar` + 强调按钮，支持选择、复制粘贴、输入法、回车保存 / Esc 取消；校验 IPv4 地址和端口，保存失败时就地提示。
+- **Startup**：原生 `ToggleSwitch` 管理当前用户 `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` 中的 `MonitorSwitch` 启动项，路径带引号；读取失败时禁用开关，写入失败时恢复原状态。安装升级保留启动偏好，卸载仅移除指向当前安装目录的启动项。
 - **布局**：托盘面板采用快捷设置式信号源磁贴；背光与音量滑块对齐，左侧扬声器按钮用于静音。窗口按客户区测量和缩放，避免底栏被非客户区边框裁切。
 - **窗口边缘与位置**：整个面板使用客户区绘制，Windows 11 的圆角和阴影由 DWM 统一处理。打开时按托盘所在屏幕的任务栏边缘定位，并固定本次显示的锚点；展开或收起隐藏图标抽屉、轮询刷新、操作滑块都不会让面板跟随图标跳动。
 - **背景材质**：面板与设置窗口使用系统 `DesktopAcrylicBackdrop`；内容背景透明，保留系统亚克力的模糊、透色和噪点，面板底栏仅增加轻微分层。材质深浅与关闭透明效果时的纯色回退由系统管理。
