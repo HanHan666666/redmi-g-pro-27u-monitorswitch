@@ -3,6 +3,12 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
+VERSION="$(tr -d '\r\n' < VERSION.txt)"
+if [[ ! "$VERSION" =~ '^[0-9]+\.[0-9]+\.[0-9]+$' ]]; then
+  echo "无效的 macOS 版本号: $VERSION" >&2
+  exit 1
+fi
+
 APP=build/MonitorSwitch.app
 rm -rf build
 mkdir -p "$APP/Contents/MacOS"
@@ -31,6 +37,9 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 </dict>
 </plist>
 PLIST
+
+/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" "$APP/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleVersion $VERSION" "$APP/Contents/Info.plist"
 
 # 图标（首次请先跑 ./make_icon.sh 生成 Assets/AppIcon.icns 与 Assets/MenuBarMI.png）
 if [ -f Assets/AppIcon.icns ]; then

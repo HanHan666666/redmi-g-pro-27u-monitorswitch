@@ -46,7 +46,7 @@ Windows 版额外的桌面平台适配：
 
 ### macOS
 
-- macOS 13+
+- macOS 13+（发布包适用于 Apple Silicon / arm64）
 - 本机装有 adb（`brew install android-platform-tools`，或 Android SDK platform-tools）
 
 ### Windows
@@ -60,10 +60,16 @@ Windows 版额外的桌面平台适配：
 
 ### macOS
 
+从 [Releases](https://github.com/HanHan666666/redmi-g-pro-27u-monitorswitch/releases) 下载 `MonitorSwitch-*-macOS.zip`，解压后将 `MonitorSwitch.app` 拖入「应用程序」文件夹。发布页同时提供 SHA-256 校验文件。
+
+从源码构建：
+
 ```bash
 ./build.sh          # 产出 build/MonitorSwitch.app（ad-hoc 签名，本机自用）
 ./install.sh        # 构建并安装到 /Applications，然后启动
 ```
+
+macOS 版本号由根目录的 `VERSION.txt` 管理。推送 `macos-v1.2.0` 这样的标签会自动构建并发布 macOS ZIP 与校验文件，标签版本须与 `VERSION.txt` 一致。
 
 ### Windows
 

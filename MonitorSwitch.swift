@@ -472,7 +472,7 @@ final class SettingsPanelController: NSObject, NSWindowDelegate {
         }
         let view = SettingsView(address: initial, onSave: onSave)
         let newPanel = NSPanel(contentViewController: NSHostingController(rootView: view))
-        newPanel.title = "ADB 设置"
+        newPanel.title = "显示器设置"
         newPanel.styleMask = [.titled, .closable]
         newPanel.isFloatingPanel = true
         newPanel.level = .floating
@@ -496,14 +496,16 @@ struct SettingsView: View {
     @State private var invalid = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 16) {
             Text("显示器 ADB 地址").font(.headline)
             Text("在显示器上开启「网络 ADB 调试」后获得的 IP 地址，端口可省略（默认 5555）。")
                 .font(.caption)
                 .foregroundColor(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             TextField("例如 192.168.1.100:5555", text: $address)
                 .textFieldStyle(.roundedBorder)
-                .frame(width: 280)
+                .accessibilityLabel("显示器 ADB 地址")
+                .onChange(of: address) { _ in invalid = false }
             if invalid {
                 Text("地址无效，请检查后重试").font(.caption).foregroundColor(.red)
             }
@@ -512,7 +514,8 @@ struct SettingsView: View {
                 Button("取消") {
                     NSApp.keyWindow?.close()
                 }
-                Button("保存") {
+                .keyboardShortcut(.cancelAction)
+                Button("保存地址") {
                     if Config.normalize(address) != nil {
                         invalid = false
                         NSApp.keyWindow?.close()
@@ -524,7 +527,8 @@ struct SettingsView: View {
                 .keyboardShortcut(.defaultAction)
             }
         }
-        .padding(20)
+        .padding(24)
+        .frame(width: 360)
     }
 }
 
@@ -534,126 +538,173 @@ struct PanelContent: View {
     @ObservedObject var state: AppState
     @State private var sliderValue: Double = 0
     @State private var dragging = false
-    @State private var backlightSlider: Double = 0
+    @State private var backlightSlider: Double = 1
     @State private var backlightDragging = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 14) {
             headerView
             Divider()
-            Text("信号源").font(.caption).foregroundColor(.secondary)
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
-                ForEach(SourceItem.all) { item in
-                    Button {
-                        state.switchSource(item.id)
-                    } label: {
-                        HStack {
-                            Image(systemName: state.currentSource == item.id ? "checkmark.circle.fill" : "circle")
-                            Text(item.name)
+            VStack(alignment: .leading, spacing: 8) {
+                Text("信号源")
+                    .font(.subheadline.weight(.semibold))
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
+                    ForEach(SourceItem.all) { item in
+                        let selected = state.online && state.currentSource == item.id
+                        Button {
+                            state.switchSource(item.id)
+                        } label: {
+                            HStack(spacing: 8) {
+                                Image(systemName: item.id == 30 ? "cable.connector" : "display")
+                                    .frame(width: 20)
+                                Text(item.name)
+                                Spacer(minLength: 0)
+                                Image(systemName: "checkmark")
+                                    .font(.caption.weight(.semibold))
+                                    .opacity(selected ? 1 : 0)
+                            }
+                            .font(.callout.weight(.medium))
+                            .padding(.horizontal, 12)
+                            .frame(height: 42)
                         }
-                        .frame(maxWidth: .infinity)
+                        .buttonStyle(SourceButtonStyle(selected: selected))
+                        .accessibilityValue(selected ? "当前信号源" : "")
+                        .help("切换至 \(item.name)")
                     }
-                    .controlSize(.large)
-                    .buttonStyle(.bordered)
-                    .tint(state.currentSource == item.id ? .accentColor : .secondary)
                 }
             }
-            Text("背光").font(.caption).foregroundColor(.secondary)
-            HStack(spacing: 10) {
-                Image(systemName: backlightIcon)
-                    .foregroundColor(.secondary)
-                    .frame(width: 20)
-                Slider(value: $backlightSlider, in: 1...100, step: 1) { editing in
-                    backlightDragging = editing
-                    if editing {
-                        state.beginBacklightDrag()
-                    } else {
-                        state.setBacklight(Int(backlightSlider.rounded()))
+            Divider()
+            VStack(spacing: 4) {
+                controlHeading("背光", value: state.online ? "\(Int(backlightSlider.rounded()))%" : "—")
+                HStack(spacing: 10) {
+                    Image(systemName: backlightIcon)
+                        .foregroundColor(.secondary)
+                        .frame(width: 20)
+                    Slider(value: $backlightSlider, in: 1...100) { editing in
+                        backlightDragging = editing
+                        if editing {
+                            state.beginBacklightDrag()
+                        } else {
+                            state.setBacklight(Int(backlightSlider.rounded()))
+                        }
+                    }
+                    .disabled(!state.online)
+                    .accessibilityLabel("背光")
+                    .accessibilityValue("\(Int(backlightSlider.rounded()))%")
+                    .help("背光（1–100）")
+                    .onAppear {
+                        if !backlightDragging { backlightSlider = max(1, state.backlight) }
+                    }
+                    .onChange(of: state.backlight) { polled in
+                        if !backlightDragging { backlightSlider = max(1, polled) }
                     }
                 }
-                .disabled(!state.online)
-                .onAppear {
-                    if !backlightDragging { backlightSlider = state.backlight }
-                }
-                .onChange(of: state.backlight) { polled in
-                    if !backlightDragging { backlightSlider = polled }
-                }
-                Text("\(Int(backlightSlider))")
-                    .font(.callout.monospacedDigit())
-                    .foregroundColor(.secondary)
-                    .frame(width: 30, alignment: .trailing)
-                    .help("背光（0–100）")
             }
-            Text("音量").font(.caption).foregroundColor(.secondary)
-            HStack(spacing: 10) {
-                Image(systemName: volumeIcon)
-                    .foregroundColor(.secondary)
-                    .frame(width: 20)
-                Slider(value: $sliderValue, in: 0...max(state.volumeMax, 1), step: 1) { editing in
-                    dragging = editing
-                    if editing {
-                        state.beginVolumeDrag()
-                    } else {
-                        // 松手才发送，拖动过程不触发任何调整
-                        state.setVolume(Int(sliderValue.rounded()))
+            VStack(spacing: 4) {
+                controlHeading("音量", value: state.online ? "\(Int(sliderValue.rounded()))" : "—")
+                HStack(spacing: 10) {
+                    Button {
+                        state.toggleMute()
+                    } label: {
+                        Image(systemName: volumeIcon)
+                            .foregroundColor(.secondary)
+                            .frame(width: 20, height: 20)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(!state.online)
+                    .accessibilityLabel("切换静音")
+                    .help("切换静音")
+                    Slider(value: $sliderValue, in: 0...max(state.volumeMax, 1)) { editing in
+                        dragging = editing
+                        if editing {
+                            state.beginVolumeDrag()
+                        } else {
+                            // 松手才发送，拖动过程不触发任何调整
+                            state.setVolume(Int(sliderValue.rounded()))
+                        }
+                    }
+                    .disabled(!state.online)
+                    .accessibilityLabel("音量")
+                    .accessibilityValue("\(Int(sliderValue.rounded()))，最大 \(Int(state.volumeMax))")
+                    .onAppear {
+                        // 面板每次打开都会新建视图：主动取一次当前值，
+                        // 否则 onChange 在"值没变"时永远不触发，滑块停在初始 0
+                        if !dragging { sliderValue = state.volume }
+                    }
+                    .onChange(of: state.volume) { polled in
+                        if !dragging { sliderValue = polled } // 非拖动期间同步设备值
                     }
                 }
-                .disabled(!state.online)
-                .onAppear {
-                    // 面板每次打开都会新建视图：主动取一次当前值，
-                    // 否则 onChange 在"值没变"时永远不触发，滑块停在初始 0
-                    if !dragging { sliderValue = state.volume }
-                }
-                .onChange(of: state.volume) { polled in
-                    if !dragging { sliderValue = polled } // 非拖动期间同步设备值
-                }
-                Text("\(Int(sliderValue))")
-                    .font(.callout.monospacedDigit())
-                    .foregroundColor(.secondary)
-                    .frame(width: 30, alignment: .trailing)
-                    .help("音量（0–100）")
-                Button {
-                    state.toggleMute()
-                } label: {
-                    Image(systemName: "speaker.slash.fill")
-                }
-                .buttonStyle(.borderless)
-                .disabled(!state.online)
-                .help("静音")
             }
             Divider()
             HStack {
-                Button("ADB 设置…") { state.openSettings() }
-                Button("刷新") { state.refresh() }
+                Button { state.openSettings() } label: {
+                    Label("设置…", systemImage: "gearshape")
+                }
                 Spacer()
+                Button { state.refresh() } label: {
+                    Image(systemName: "arrow.clockwise")
+                }
+                .accessibilityLabel("刷新连接状态")
+                .help("刷新连接状态")
                 Button("退出") { NSApplication.shared.terminate(nil) }
+                    .padding(.leading, 8)
             }
+            .buttonStyle(.borderless)
+            .foregroundColor(.secondary)
             .controlSize(.small)
         }
-        .padding(14)
-        .frame(width: 320)
+        .padding(16)
+        .frame(width: 340)
     }
 
-    @ViewBuilder
     private var headerView: some View {
-        if state.adbMissing {
-            Label("未找到 adb，请安装 platform-tools", systemImage: "exclamationmark.circle")
-                .font(.callout)
-        } else if !state.configured {
-            HStack {
-                Label("未配置设备地址", systemImage: "questionmark.circle")
-                Spacer()
-                Button("去设置") { state.openSettings() }
+        HStack(spacing: 10) {
+            Image(systemName: "display")
+                .font(.system(size: 20))
+                .foregroundColor(.accentColor)
+                .frame(width: 36, height: 36)
+                .background(Color.accentColor.opacity(0.1), in: RoundedRectangle(cornerRadius: 9))
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Redmi G Pro 27U")
+                    .font(.headline)
+                Text(statusDetail)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .help(statusDetail)
             }
-            .font(.callout)
-        } else {
-            Label(
-                state.online ? "已连接 \(Config.deviceAddress ?? "") · 当前: \(state.currentSourceName)"
-                             : "未连接 \(Config.deviceAddress ?? "")",
-                systemImage: state.online ? "circle.fill" : "circle"
-            )
-            .font(.callout)
-            .foregroundColor(state.online ? .primary : .red)
+            Spacer(minLength: 4)
+            HStack(spacing: 4) {
+                Circle()
+                    .fill(state.online ? Color.green : Color.secondary)
+                    .frame(width: 6, height: 6)
+                Text(state.online ? "已连接" : "未连接")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+            .fixedSize()
+        }
+    }
+
+    private var statusDetail: String {
+        if state.adbMissing {
+            return "未找到 adb，请安装 platform-tools"
+        } else if !state.configured {
+            return "请在设置中填写显示器地址"
+        }
+        return Config.deviceAddress ?? ""
+    }
+
+    private func controlHeading(_ title: String, value: String) -> some View {
+        HStack {
+            Text(title).font(.subheadline.weight(.semibold))
+            Spacer()
+            Text(value)
+                .font(.callout.monospacedDigit())
+                .foregroundColor(.secondary)
         }
     }
 
@@ -667,6 +718,24 @@ struct PanelContent: View {
         if sliderValue <= 0 { return "speaker.slash.fill" }
         if sliderValue < state.volumeMax * 0.4 { return "speaker.wave.1.fill" }
         return "speaker.wave.3.fill"
+    }
+}
+
+private struct SourceButtonStyle: ButtonStyle {
+    let selected: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .foregroundColor(selected ? .accentColor : .primary)
+            .background {
+                RoundedRectangle(cornerRadius: 9)
+                    .fill(selected ? Color.accentColor.opacity(0.14) : Color.primary.opacity(0.045))
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: 9)
+                    .strokeBorder(selected ? Color.accentColor.opacity(0.3) : Color.primary.opacity(0.06))
+            }
+            .brightness(configuration.isPressed ? -0.05 : 0)
     }
 }
 

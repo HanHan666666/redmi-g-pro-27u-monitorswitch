@@ -1,8 +1,8 @@
-name: Release
+name: macOS build and release
 
 on:
   push:
-    tags: ["v*"]
+    tags: ["v*", "macos-v*"]
 
 permissions:
   contents: write
@@ -10,20 +10,49 @@ permissions:
 jobs:
   release:
     runs-on: macos-14
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+
+      - name: Verify release version
+        shell: bash
+        run: |
+          VERSION="$(tr -d '\r\n' < VERSION.txt)"
+          TAG_VERSION="${GITHUB_REF_NAME#macos-}"
+          test "${TAG_VERSION#v}" = "$VERSION"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
 
       - name: Build MonitorSwitch.app
         run: ./build.sh
 
-      - name: Package (ditto zip)
+      - name: Verify app bundle
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
+          codesign --verify --deep --strict "build/MonitorSwitch.app"
+          plutil -lint "build/MonitorSwitch.app/Contents/Info.plist"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' build/MonitorSwitch.app/Contents/Info.plist)" = "$VERSION"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' build/MonitorSwitch.app/Contents/Info.plist)" = "$VERSION"
+          test -s "build/MonitorSwitch.app/Contents/Resources/MtkDirectTool.jar"
+          test -s "build/MonitorSwitch.app/Contents/Resources/VolDirectTool.jar"
+
+      - name: Package ZIP and checksum
+        run: |
           ditto -c -k --keepParent "build/MonitorSwitch.app" "MonitorSwitch-${VERSION}-macOS.zip"
-          ls -la MonitorSwitch-*.zip
+          shasum -a 256 "MonitorSwitch-${VERSION}-macOS.zip" > "MonitorSwitch-${VERSION}-macOS-SHA256SUMS.txt"
+          shasum -a 256 -c "MonitorSwitch-${VERSION}-macOS-SHA256SUMS.txt"
 
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
-          files: MonitorSwitch-*-macOS.zip
+          name: MonitorSwitch ${{ env.VERSION }} for macOS
+          files: |
+            MonitorSwitch-*-macOS.zip
+            MonitorSwitch-*-macOS-SHA256SUMS.txt
+          fail_on_unmatched_files: true
           generate_release_notes: true
+          body: |
+            macOS ${{ env.VERSION }} 更新：
+            - 优化菜单栏面板的连接信息、信号源选中样式、滑块和底栏布局，适配系统深浅色。
+            - 优化显示器设置窗口，说明文字自动换行，支持 Esc 关闭。
+
+            下载 macOS ZIP，解压后将 MonitorSwitch.app 拖入「应用程序」文件夹。
+            适用于 macOS 13 及以上的 Apple Silicon Mac。仍需单独安装 Android platform-tools（ADB），并在显示器上开启网络 ADB 调试。
